@@ -111,6 +111,7 @@ void init_kernel(){
         semaphore[i].task_list = NULLTASKID;
         semaphore[i].nst = 0;
     }
+
 	*(char*)0x00d00039='e';
 	return;
 }
@@ -251,3 +252,50 @@ TASK_ID_TYPE removeq(TASK_ID_TYPE *head) {
 	return t;
 }
 
+/* 外部関数宣言 (モニタシステムコールへのインターフェースと仮定) */
+extern int mtk_getstring(int uart_ch, char *buf, int len);
+extern int mtk_putstring(int uart_ch, char *buf, int len);
+
+/* inbyte_body(uart_ch): 1文字入力システムコール本体 */
+char inbyte_body(int uart_ch) {
+    char c = 0;
+    int sem_ch = (uart_ch == 0) ? SEM_UART0_IN : SEM_UART1_IN;
+    
+    // P操作: 入力リソースの獲得
+    P(sem_ch); 
+    
+    // モニタのGETSTRINGシステムコールを呼び出し
+    while (mtk_getstring(uart_ch, &c, 1) != 1) {
+        /* リトライが必要な場合はここにループ処理を追加 */
+    }
+    
+    // V操作: 入力リソースの解放
+    V(sem_ch);
+    
+    return c;
+}
+
+/* outbyte_body(c, uart_ch): 1文字出力システムコール本体 */
+void outbyte_body(char c, int uart_ch) {
+    int sem_ch = (uart_ch == 0) ? SEM_UART0_OUT : SEM_UART1_OUT;
+    
+    // P操作: 出力リソースの獲得
+    P(sem_ch);
+    
+    // モニタのPUTSTRINGシステムコールを呼び出し
+    while (mtk_putstring(uart_ch, &c, 1) != 1) {
+        /* リトライが必要な場合はここにループ処理を追加 */
+    }
+    
+    // V操作: 出力リソースの解放
+    V(sem_ch);
+}
+
+// inbyte/outbyteのアセンブリ側からのラッパー関数（csys68kから呼ばれる）
+char inbyte(int uart_ch) {
+    return inbyte_body(uart_ch);
+}
+
+void outbyte(unsigned char c, int uart_ch) {
+    outbyte_body((char)c, uart_ch);
+}
