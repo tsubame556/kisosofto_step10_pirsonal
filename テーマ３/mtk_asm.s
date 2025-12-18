@@ -258,3 +258,4 @@ hard_clock_end:
     * 5. レジスタの復帰.
     movem.l (%sp)+, %d0-%d1/%a1 
     rts
+
