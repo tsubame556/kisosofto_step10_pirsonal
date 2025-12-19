@@ -5,6 +5,9 @@
 #include "mtk_c.h"
 #include <fcntl.h>
 
+/* --- 修正: swtch関数のプロトタイプ宣言を追加 --- */
+extern void swtch(void);
+
 /* --- 定数定義 --- */
 #define PHASE_SETUP     0
 #define PHASE_PC_TURN   1
@@ -17,7 +20,7 @@ FILE* com0out;
 FILE* com1in;
 FILE* com1out;
 
-/* ★共有バッファ (スタックではなくグローバル領域に配置) */
+/* 共有バッファ */
 char shared_buf[256];
 
 /* ゲーム状態管理 */
@@ -49,35 +52,30 @@ void check_hit_blow(const char* target, const char* guess, int* h, int* b) {
 /* --- ヘルパー: 入力チェック --- */
 int is_valid_input(const char* str) {
     if (strlen(str) != 3) return 0;
-    for(int i=0; i<3; i++) if (!isdigit(str[i])) return 0;
+    /* 修正: isdigit には unsigned char を渡す (警告対策) */
+    for(int i=0; i<3; i++) if (!isdigit((unsigned char)str[i])) return 0;
     return 1;
 }
 
-/* ★セマフォを使った安全な出力関数 (スタック節約版) */
-/* fprintfの代わりにこれを使うことで、formatting用のバッファを共有する */
+/* セマフォを使った安全な出力関数 */
 void safe_print(FILE* fp, const char* msg) {
-    P(SEM_IO); /* ロック取得 */
-    
-    /* 共有バッファの内容を出力 */
-    /* 注: ここではsprintf済みの内容などを出す想定だが、
-       単純化のため fputs で出力する。 */
+    P(SEM_IO); 
     fprintf(fp, "%s", msg);
-    
-    V(SEM_IO); /* ロック開放 */
+    V(SEM_IO);
 }
 
 /******************************************************************
 ** タスク1: PC (UART0)
 ******************************************************************/
 void task_pc(){
-    static char in_buf[16]; /* 入力用は小さいので各タスク保持(static) */
+    static char in_buf[16];
     static int h, b;
     unsigned long sp_save;
 
     P(SEM_IO); fprintf(com0out, "Please enter a 3-digit number.\n"); V(SEM_IO);
     
     while(1) {
-        fscanf(com0in, "%15s", in_buf); /* 入力はブロックするのでロックしない */
+        fscanf(com0in, "%15s", in_buf);
         if (is_valid_input(in_buf)) {
             strcpy(secret_pc, in_buf);
             break;
@@ -94,7 +92,8 @@ void task_pc(){
     P(SEM_IO); fprintf(com0out, "START\n"); V(SEM_IO);
     game_phase = PHASE_PC_TURN;
 
-    __asm__ volatile ("move.l %sp, %0" : "=r" (sp_save)); /* SP保存 */
+    /* 修正: %sp -> %%sp (GCCインラインアセンブラのエスケープ) */
+    __asm__ volatile ("move.l %%sp, %0" : "=r" (sp_save)); 
 
     while(1){
         if (game_phase == PHASE_PC_TURN) {
@@ -104,7 +103,6 @@ void task_pc(){
             if (is_valid_input(in_buf)) {
                 check_hit_blow(secret_ext, in_buf, &h, &b);
                 
-                /* ★共有バッファを使ってメッセージを作成 (スタック節約) */
                 P(SEM_IO);
                 sprintf(shared_buf, "Result: %d Hit, %d Blow\n", h, b);
                 fprintf(com0out, "%s", shared_buf);
@@ -129,8 +127,8 @@ void task_pc(){
         else {
             swtch();
         }
-        /* SP巻き戻し (リーク対策として維持) */
-        __asm__ volatile ("move.l %0, %sp" : : "r" (sp_save));
+        /* 修正: %sp -> %%sp */
+        __asm__ volatile ("move.l %0, %%sp" : : "r" (sp_save));
     }
 }
 
@@ -161,7 +159,8 @@ void task_ext(){
 
     P(SEM_IO); fprintf(com1out, "START\n"); V(SEM_IO);
 
-    __asm__ volatile ("move.l %sp, %0" : "=r" (sp_save)); /* SP保存 */
+    /* 修正: %sp -> %%sp */
+    __asm__ volatile ("move.l %%sp, %0" : "=r" (sp_save));
 
     while(1){
         if (game_phase == PHASE_EXT_TURN) {
@@ -171,7 +170,6 @@ void task_ext(){
             if (is_valid_input(in_buf)) {
                 check_hit_blow(secret_pc, in_buf, &h, &b);
                 
-                /* ★共有バッファを利用 */
                 P(SEM_IO);
                 sprintf(shared_buf, "Result: %d Hit, %d Blow\n", h, b);
                 fprintf(com1out, "%s", shared_buf);
@@ -196,8 +194,8 @@ void task_ext(){
         else {
             swtch();
         }
-        /* SP巻き戻し */
-        __asm__ volatile ("move.l %0, %sp" : : "r" (sp_save));
+        /* 修正: %sp -> %%sp */
+        __asm__ volatile ("move.l %0, %%sp" : : "r" (sp_save));
     }
 }
 
