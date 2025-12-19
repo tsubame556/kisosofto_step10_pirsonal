@@ -7,6 +7,8 @@
 #define STKSIZE     4096    /* スタックサイズ */
 // セマフォの数を増やす (最低でもUART0/1のin/out用に4つ必要)
 #define NUMSEMAPHORE 7      /* セマフォの数 */
+/* セマフォIDの役割定義 */
+#define SEM_IO      0       /* 入出力共有バッファ用 */
 
 /* 型定義 */
 typedef int TASK_ID_TYPE;
