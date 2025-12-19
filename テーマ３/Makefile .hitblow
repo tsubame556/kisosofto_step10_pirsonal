@@ -1,0 +1,34 @@
+################################################################
+### Software Jikken -- Makefile for C Jikken
+### $Id: Makefile.hitblow, 2025/12/19  $
+################################################################
+
+PROGRAM		= hitblow
+
+# 1. パスの定義を明示的に追加
+LIB_JIKKEN	= /usr/local/lib/soft-jikken
+# 以前のビルドで成功した libgcc.a のフルパスを指定
+LOCAL_GCC_LIB	= /home/yama/m68k-toolchain-11.4/usr/local/lib/gcc/m68k-elf/11.4.0/libgcc.a
+
+# mon.o must be first so that ld places mon.o $400.
+OBJECTS		= crt0.o mon.o csys68k.o inchrw.o mtk_asm.o \
+			mtk_c.o outchr.o hitblow.o
+
+SRCS		= crt0.s mon.s csys68k.c inchrw.s mtk_asm.s \
+			mtk_c.c outchr.s hitblow.c
+
+ASMGLIS		= crt0.glis mon.glis csys68k.glis inchrw.glis mtk_asm.glis \
+			mtk_c.glis outchr.glis hitblow.glis
+
+# 2. 設定ファイルのインクルード
+include $(LIB_JIKKEN)/make.conf
+
+# 3. リンクルールの修正 (ld ではなく gcc をリンカとして使用し、直接ライブラリを指定)
+$(PROGRAM).hex: $(OBJECTS)
+	LANG=C LC_ALL=C m68k-elf-gcc -m68000 -msoft-float -nodefaultlibs -nostdlib \
+	$(OBJECTS) $(LOCAL_GCC_LIB) -o $(PROGRAM).hex \
+	-Wl,-Map,$(PROGRAM).map -Wl,-T,$(LIB_JIKKEN)/ldscript.cmd
+
+# mon.o のコピー処理 (もし mon_dist.obj がある場合)
+mon.o:
+	if [ -f mon_dist.obj ]; then cp mon_dist.obj mon.o; fi
